@@ -1,0 +1,20 @@
+version: "1"
+types:
+  - name: Person
+    description: A named individual human being
+    examples:
+      - Marie Curie
+      - Albert Einstein
+      - Ada Lovelace
+  - name: Organization
+    description: A company, agency, institution, or other formal group
+    examples:
+      - NASA
+      - Apple Inc.
+      - the United Nations
+  - name: Location
+    description: A geographic place — country, city, region, landmark, or address
+    examples:
+      - Paris
+      - Mount Everest
+      - 1600 Pennsylvania Avenue
