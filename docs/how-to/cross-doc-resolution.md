@@ -73,6 +73,102 @@ for cluster_id, cluster in registry.clusters.items():
     print(f"  {cluster_id} ({len(cluster)}) — {canonical}")
 ```
 
+## Incremental resolution against an existing workdir
+
+Cross-doc resolution is batch by default — every run re-embeds and
+re-clusters every entity. For a growing corpus, this is wasteful and
+also rewrites cluster ids as the data shifts. Incremental mode assigns
+new entities to existing clusters (or creates new ones) without
+touching the old corpus.
+
+The mechanism is a small sidecar file alongside `registry.json`:
+
+```text
+workdir/
+├── registry.json
+├── registry_embeddings.npz        # one centroid per cluster
+└── registry_embeddings.meta.json  # embedder id + dim
+```
+
+Every `hkx resolve` and `hkx pipeline` writes this sidecar
+automatically. To resolve a new batch of documents against it:
+
+```bash
+# First batch — produces wd1/ with registry + sidecar
+hkx pipeline docs/batch1 -s schema.yaml -o wd1/
+
+# Second batch — assigns into wd1's clusters or creates new ones,
+# writing the merged result to wd2/.
+hkx pipeline docs/batch2 -s schema.yaml -o wd2/ --against wd1/
+
+# `hkx resolve` accepts the same flag if you've already extracted.
+hkx resolve wd2/ --against wd1/
+```
+
+The decision per new entity, blocked by entity type:
+
+1. If similarity to the nearest existing centroid is at or above
+   `merge_threshold` → assign to that existing cluster.
+2. If it's between `borderline_threshold` and `merge_threshold` and an
+   LLM client is available → tie-break against the nearest existing
+   cluster.
+3. Otherwise → either join a new-batch cluster formed by an earlier
+   entity in the same run (if their similarity is above the merge
+   threshold), or become its own new singleton cluster.
+
+The sidecar's `embedder_id` is recorded so swapping the embedding
+model between runs is rejected loudly rather than silently producing
+garbage similarities.
+
+### Library API
+
+```python
+from hierokeryx import pipeline
+from hierokeryx.resolve.crossdoc import resolve_incremental
+from hierokeryx.resolve.embed import SentenceTransformerEmbedder
+
+existing_registry = pipeline.load_registry("wd1/registry.json")
+existing_centroids = pipeline.load_centroids("wd1/")
+new_results = pipeline.load_extractions_dir("wd2/extractions")
+
+updated, merged_registry, merged_centroids = resolve_incremental(
+    new_results,
+    schema,
+    existing_registry=existing_registry,
+    existing_centroids=existing_centroids,
+    embedder=SentenceTransformerEmbedder(),
+    llm_client=...,  # optional; required for borderline tie-break
+)
+pipeline.save_registry(merged_registry, "wd2/registry.json")
+pipeline.save_centroids("wd2/", merged_centroids)
+```
+
+### Retrofitting older workdirs
+
+Workdirs created before the centroid sidecar existed can be upgraded
+in place — the recomputation reads only the existing extractions, no
+LLM calls:
+
+```bash
+hkx resolve-centroids-rebuild path/to/old-workdir
+```
+
+After this, the workdir is a valid target for `--against`.
+
+### When NOT to use incremental
+
+- **You changed the schema.** New entity types or substantially edited
+  type descriptions mean the LLM's coref decisions on the old corpus
+  may no longer match. Re-batch.
+- **You changed the embedder.** The centroid sidecar will refuse the
+  merge — rebuild from scratch (or `resolve-centroids-rebuild` first).
+- **Drift across many incremental runs is unacceptable.** Each
+  incremental run is greedy and order-dependent; over many batches
+  cluster shapes can diverge from what a single batch run would
+  produce. Periodically re-run a full batch resolve as a baseline —
+  the [eval harness](evaluating-resolution.md) makes the comparison
+  measurable.
+
 ## Inspecting the registry
 
 ```python

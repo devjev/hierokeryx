@@ -16,3 +16,7 @@ The pipeline orchestrator and workdir persistence helpers.
         - load_extractions_dir
         - save_registry
         - load_registry
+        - compute_centroids
+        - save_centroids
+        - load_centroids
+        - resolve_incremental

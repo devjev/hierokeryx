@@ -136,6 +136,7 @@ nav:
       - Roundtrip JSONL programmatically: how-to/programmatic-jsonl.md
       - Run on GPU: how-to/run-on-gpu.md
       - Cross-document resolution: how-to/cross-doc-resolution.md
+      - Evaluate resolution quality: how-to/evaluating-resolution.md
       - Library mode (no CLI): how-to/library-mode.md
       - Cost and prompt caching: how-to/cost-and-caching.md
   - Concepts:
@@ -156,6 +157,7 @@ nav:
           - hierokeryx.resolve: reference/api/resolve.md
           - hierokeryx.llm: reference/api/llm.md
           - hierokeryx.review: reference/api/review.md
+          - hierokeryx.eval: reference/api/eval.md
       - CLI: reference/cli.md
   - Comparison: comparison.md
   - Troubleshooting: troubleshooting.md

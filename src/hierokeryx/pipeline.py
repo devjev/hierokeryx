@@ -36,8 +36,13 @@ from hierokeryx.models import (
     ExtractionResult,
     ReviewItem,
 )
+from hierokeryx.resolve.centroids import (
+    compute_centroids,
+    load_centroids,
+    save_centroids,
+)
 from hierokeryx.resolve.coref import resolve_within_doc
-from hierokeryx.resolve.crossdoc import resolve_crossdoc
+from hierokeryx.resolve.crossdoc import resolve_crossdoc, resolve_incremental
 from hierokeryx.resolve.embed import SentenceTransformerEmbedder
 from hierokeryx.review.apply import apply_review
 from hierokeryx.review.jsonl import (
@@ -46,6 +51,22 @@ from hierokeryx.review.jsonl import (
     write_review_dir,
 )
 from hierokeryx.schema import save_schema
+
+__all__ = [
+    "PipelineRun",
+    "run",
+    "run_one",
+    "import_reviewed",
+    "save_extraction",
+    "load_extraction",
+    "save_registry",
+    "load_registry",
+    "load_extractions_dir",
+    "compute_centroids",
+    "load_centroids",
+    "save_centroids",
+    "resolve_incremental",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +95,15 @@ def run(
     merge_threshold: float = 0.82,
     borderline_threshold: float = 0.75,
     only_flagged_review: bool = True,
+    incremental_from: str | Path | None = None,
 ) -> PipelineRun:
-    """Run the full pipeline: extract → coref → cross-doc → HITL routing."""
+    """Run the full pipeline: extract → coref → cross-doc → HITL routing.
+
+    If `incremental_from` is set, load that workdir's registry + centroid
+    sidecar and resolve new entities against it instead of clustering from
+    scratch. The merged registry and updated centroids are written into
+    `workdir`.
+    """
     workdir_path = Path(workdir)
     workdir_path.mkdir(parents=True, exist_ok=True)
     (workdir_path / "extractions").mkdir(exist_ok=True)
@@ -86,7 +114,22 @@ def run(
     extractor = extractor or GLiNERExtractor()
     extraction_results, extraction_paths = _extract_phase(documents, schema, extractor, llm_client, workdir_path)
 
-    if len(extraction_results) > 1:
+    embedder = embedder or SentenceTransformerEmbedder()
+
+    if incremental_from is not None:
+        existing_registry = load_registry(Path(incremental_from) / "registry.json")
+        existing_centroids = load_centroids(incremental_from)
+        updated, registry, centroids = resolve_incremental(
+            extraction_results,
+            schema,
+            existing_registry=existing_registry,
+            existing_centroids=existing_centroids,
+            llm_client=llm_client,
+            embedder=embedder,
+            merge_threshold=merge_threshold,
+            borderline_threshold=borderline_threshold,
+        )
+    elif len(extraction_results) > 1:
         updated, registry = resolve_crossdoc(
             extraction_results,
             schema,
@@ -95,6 +138,7 @@ def run(
             merge_threshold=merge_threshold,
             borderline_threshold=borderline_threshold,
         )
+        centroids = compute_centroids(updated, embedder)
     else:
         # Single doc → all entities are singleton clusters, just tag them.
         updated, registry = resolve_crossdoc(
@@ -103,6 +147,7 @@ def run(
             llm_client=None,  # no need for tie-break with one doc
             embedder=embedder,
         )
+        centroids = compute_centroids(updated, embedder)
 
     # Re-save extractions with cluster_ids attached.
     extraction_paths = []
@@ -112,6 +157,7 @@ def run(
         extraction_paths.append(path)
 
     save_registry(registry, workdir_path / "registry.json")
+    save_centroids(workdir_path, centroids)
 
     flagged_entities = [
         e for result in updated for e in result.entities

@@ -38,6 +38,9 @@ hkx = "hierokeryx.cli:app"
 gpu = [
     "torch>=2.5",
 ]
+gateway = [
+    "openai>=1.50",
+]
 
 [dependency-groups]
 dev = [
@@ -89,6 +92,8 @@ ignore = [
 "src/hierokeryx/resolve/embed.py" = ["PLC0415"]           # lazy sentence-transformer
 "src/hierokeryx/resolve/cluster.py" = ["PLC0415"]         # was: lazy HDBSCAN
 "src/hierokeryx/llm/anthropic_client.py" = ["PLC0415"]    # lazy Anthropic SDK
+"src/hierokeryx/llm/standard_gateway_client.py" = ["PLC0415"]  # lazy openai SDK
+"src/hierokeryx/resolve/crossdoc.py" = ["PLR0915"]        # resolve_incremental is a state machine
 
 [tool.mypy]
 python_version = "3.13"
@@ -98,7 +103,7 @@ disallow_untyped_decorators = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["gliner.*", "sentence_transformers.*", "sklearn.*", "vcr.*"]
+module = ["gliner.*", "sentence_transformers.*", "sklearn.*", "vcr.*", "openai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

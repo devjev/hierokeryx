@@ -8,15 +8,17 @@ the tooling assumes.
 
 ```text
 workdir/
-├── schema.yaml              # the EntitySchema used for this run
-├── manifest.json            # run metadata
+├── schema.yaml                    # the EntitySchema used for this run
+├── manifest.json                  # run metadata
 ├── extractions/
-│   ├── doc_01.json          # one ExtractionResult per document
+│   ├── doc_01.json                # one ExtractionResult per document
 │   ├── doc_02.json
 │   └── ...
-├── registry.json            # cross-doc EntityRegistry
+├── registry.json                  # cross-doc EntityRegistry
+├── registry_embeddings.npz        # cluster centroid sidecar (for incremental)
+├── registry_embeddings.meta.json  # embedder id + sidecar metadata
 └── review/
-    ├── doc_05.jsonl         # flagged entities, one document per file
+    ├── doc_05.jsonl               # flagged entities, one document per file
     └── ...
 ```
 
@@ -72,11 +74,25 @@ The cross-doc [`EntityRegistry`][hierokeryx.models.EntityRegistry]:
 which entities ended up in which clusters, with canonical forms and
 types per cluster.
 
-A registry is *additive across runs* in spirit but the CLI rewrites it
-from scratch on each `hkx resolve` / `hkx pipeline`. If you want
-incremental cross-doc resolution (add new documents without re-
-clustering everything), drop into library mode and build a custom
-pipeline — see [Cross-document resolution](../how-to/cross-doc-resolution.md).
+By default the CLI rewrites the registry from scratch on each
+`hkx resolve` / `hkx pipeline`. To add new documents to an existing
+registry without re-clustering everything, pass
+`--against <existing-workdir>` — see
+[Cross-document resolution](../how-to/cross-doc-resolution.md#incremental-resolution-against-an-existing-workdir).
+
+### `registry_embeddings.npz` + `registry_embeddings.meta.json`
+
+A compact NumPy sidecar of cluster centroids (one L2-normalized vector
+per cluster, plus member counts for weighted running-mean updates) and
+a small JSON manifest recording the `embedder_id` that produced them.
+
+This file is written automatically by every `hkx resolve` / `hkx
+pipeline` run and is the input for incremental resolution via
+`--against`. It carries the embedder identity so future incremental
+runs refuse to merge centroids from a different embedding model
+(silent embedder swaps produce garbage similarities). Workdirs created
+before this sidecar existed can be retrofitted with
+`hkx resolve-centroids-rebuild <workdir>`.
 
 ### `review/<doc_id>.jsonl`
 
@@ -96,9 +112,12 @@ A workdir progresses through three phases:
 1. **After `hkx extract`** — `schema.yaml`, `extractions/*.json`. No
    registry, no review. Useful for inspecting GLiNER + within-doc coref
    output before running cross-doc resolution.
-2. **After `hkx resolve`** — adds `registry.json`. The extractions are
-   rewritten in place to carry `cluster_id`. Run this any time you want
-   to recluster (different threshold, different LLM tie-break setting).
+2. **After `hkx resolve`** — adds `registry.json` plus the
+   `registry_embeddings.npz` + `.meta.json` centroid sidecar. The
+   extractions are rewritten in place to carry `cluster_id`. Run this
+   any time you want to recluster (different threshold, different LLM
+   tie-break setting). Pass `--against <existing-workdir>` to resolve
+   incrementally instead of from scratch.
 3. **After `hkx pipeline`** — fully populated, including `review/*.jsonl`
    and `manifest.json`.
 

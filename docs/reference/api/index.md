@@ -53,6 +53,10 @@ v1.0.
 
     JSONL HITL: read/write, lint, apply.
 
+- :material-chart-line:{ .lg } **[hierokeryx.eval](eval.md)**
+
+    Pairwise + BCubed metrics, JSONL gold format, threshold sweep.
+
 </div>
 
 ## Top-level re-exports

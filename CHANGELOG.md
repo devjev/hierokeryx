@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Incremental cross-document resolution.** `pipeline.run` and `hkx resolve`
+  / `hkx pipeline` now accept `--against <existing-workdir>` to assign new
+  entities to an existing `EntityRegistry` without re-clustering the entire
+  corpus. Backed by a new `registry_embeddings.npz` centroid sidecar
+  persisted next to `registry.json`. `hkx resolve-centroids-rebuild` retrofits
+  the sidecar onto workdirs created before this release. New library entry
+  point: `hierokeryx.resolve.crossdoc.resolve_incremental`.
+- **Evaluation harness.** New `hierokeryx.eval` module with pairwise and
+  BCubed P/R/F1 metrics, JSONL gold-cluster format, and a threshold-sweep
+  helper. New CLI: `hkx eval --workdir <path> --gold <path> [--sweep]
+  [--json-out <file>]`.
+- **OpenAI-compatible gateway LLM client** (`StandardGatewayClient`) for
+  Azure-OpenAI-shaped gateways that proxy Claude on Bedrock or other
+  backends. CLI commands gained `--provider {gateway,anthropic}`
+  (`gateway` is now the default). `openai>=1.50` ships as an optional
+  `[gateway]` extra.
+
+### Changed
+
+- `pipeline.run` now always persists a centroid sidecar
+  (`registry_embeddings.npz` + `.meta.json`) alongside `registry.json`,
+  recording the embedder id so future incremental runs can refuse to
+  merge centroids across embedder changes.
+
 ## [0.1.0] — 2026-05-26
 
 The initial alpha release. Full extract → resolve → review pipeline end-to-end.

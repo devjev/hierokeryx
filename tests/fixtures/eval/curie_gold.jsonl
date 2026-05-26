@@ -1,0 +1,8 @@
+{"doc_id": "doc_curie", "entity_id": "e_marie_curie", "gold_cluster_id": "g_marie_curie"}
+{"doc_id": "doc_curie_short", "entity_id": "e_marie_curie", "gold_cluster_id": "g_marie_curie"}
+{"doc_id": "doc_curie", "entity_id": "e_pierre_curie", "gold_cluster_id": "g_pierre_curie"}
+{"doc_id": "doc_curie_short", "entity_id": "e_pierre_curie", "gold_cluster_id": "g_pierre_curie"}
+{"doc_id": "doc_curie", "entity_id": "e_paris", "gold_cluster_id": "g_paris"}
+{"doc_id": "doc_curie_short", "entity_id": "e_paris", "gold_cluster_id": "g_paris"}
+{"doc_id": "doc_curie", "entity_id": "e_sorbonne", "gold_cluster_id": "g_sorbonne"}
+{"doc_id": "doc_curie_short", "entity_id": "e_sorbonne", "gold_cluster_id": "g_sorbonne"}

@@ -14,8 +14,12 @@ from rich.table import Table
 
 from hierokeryx import pipeline
 from hierokeryx.confidence import route_for_review
+from hierokeryx.eval import evaluate, load_gold, sweep_thresholds
+from hierokeryx.eval.report import EvalReport
 from hierokeryx.extract.gliner_runner import GLiNERExtractor
 from hierokeryx.llm.anthropic_client import AnthropicClient
+from hierokeryx.llm.protocol import LLMClient
+from hierokeryx.llm.standard_gateway_client import StandardGatewayClient
 from hierokeryx.models import Document
 from hierokeryx.resolve.crossdoc import resolve_crossdoc
 from hierokeryx.resolve.embed import SentenceTransformerEmbedder
@@ -40,6 +44,14 @@ console = Console()
 def _setup_logging(verbose: bool) -> None:
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
+def _make_llm_client(provider: str) -> LLMClient:
+    if provider == "anthropic":
+        return AnthropicClient()
+    if provider == "gateway":
+        return StandardGatewayClient()
+    raise typer.BadParameter(f"Unknown --provider {provider!r}; use 'anthropic' or 'gateway'.")
 
 
 def _read_documents(input_path: str) -> list[Document]:
@@ -99,6 +111,7 @@ def extract(
     out: Path = typer.Option(..., "--out", "-o", help="Workdir to write extractions to."),
     gliner_model: str = typer.Option("urchade/gliner_large-v2.5", "--gliner-model"),
     threshold: float = typer.Option(0.4, "--threshold"),
+    provider: str = typer.Option("gateway", "--provider", help="LLM provider: 'gateway' (default) or 'anthropic'."),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Run GLiNER + within-doc coref, writing extractions to `out/extractions/`."""
@@ -106,7 +119,7 @@ def extract(
     schema = load_schema(schema_path)
     docs = _read_documents(input_path)
     extractor = GLiNERExtractor(model_id=gliner_model, threshold=threshold)
-    llm = AnthropicClient()
+    llm = _make_llm_client(provider)
 
     out.mkdir(parents=True, exist_ok=True)
     (out / "extractions").mkdir(exist_ok=True)
@@ -128,24 +141,67 @@ def resolve(
     workdir: Path = typer.Argument(..., exists=True, file_okay=False),
     merge_threshold: float = typer.Option(0.82, "--threshold"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Skip LLM tie-break on borderline merges."),
+    provider: str = typer.Option("gateway", "--provider", help="LLM provider: 'gateway' (default) or 'anthropic'."),
+    against: Path | None = typer.Option(
+        None,
+        "--against",
+        help="Resolve incrementally against an existing workdir's registry + centroids.",
+        exists=True,
+        file_okay=False,
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Cluster entities across documents already in `workdir/extractions/`."""
     _setup_logging(verbose)
     schema = load_schema(workdir / "schema.yaml")
     results = pipeline.load_extractions_dir(workdir / "extractions")
-    llm = None if no_llm else AnthropicClient()
-    updated, registry = resolve_crossdoc(
-        results,
-        schema,
-        llm_client=llm,
-        embedder=SentenceTransformerEmbedder(),
-        merge_threshold=merge_threshold,
-    )
+    llm = None if no_llm else _make_llm_client(provider)
+    embedder = SentenceTransformerEmbedder()
+
+    if against is not None:
+        existing_registry = pipeline.load_registry(against / "registry.json")
+        existing_centroids = pipeline.load_centroids(against)
+        updated, registry, centroids = pipeline.resolve_incremental(
+            results,
+            schema,
+            existing_registry=existing_registry,
+            existing_centroids=existing_centroids,
+            llm_client=llm,
+            embedder=embedder,
+            merge_threshold=merge_threshold,
+        )
+    else:
+        updated, registry = resolve_crossdoc(
+            results,
+            schema,
+            llm_client=llm,
+            embedder=embedder,
+            merge_threshold=merge_threshold,
+        )
+        centroids = pipeline.compute_centroids(updated, embedder)
     for result in updated:
         pipeline.save_extraction(result, workdir / "extractions" / f"{result.document.id}.json")
     pipeline.save_registry(registry, workdir / "registry.json")
+    pipeline.save_centroids(workdir, centroids)
     console.print(f"[green]Resolved[/green]: {len(registry.clusters)} cross-doc cluster(s)")
+
+
+@app.command("resolve-centroids-rebuild")
+def resolve_centroids_rebuild(
+    workdir: Path = typer.Argument(..., exists=True, file_okay=False),
+) -> None:
+    """Recompute `registry_embeddings.npz` from the workdir's extractions.
+
+    Use to retrofit a workdir that pre-dates centroid persistence, so it can
+    be the target of `hkx resolve --against`.
+    """
+    results = pipeline.load_extractions_dir(workdir / "extractions")
+    embedder = SentenceTransformerEmbedder()
+    centroids = pipeline.compute_centroids(results, embedder)
+    pipeline.save_centroids(workdir, centroids)
+    console.print(
+        f"[green]Wrote[/green] centroid sidecar for {len(centroids.cluster_ids)} cluster(s)"
+    )
 
 
 @app.command(name="pipeline")
@@ -158,6 +214,14 @@ def pipeline_cmd(
     gliner_model: str = typer.Option("urchade/gliner_large-v2.5", "--gliner-model"),
     no_llm_tiebreak: bool = typer.Option(False, "--no-llm-tiebreak"),
     only_flagged_review: bool = typer.Option(True, "--only-flagged/--all-for-review"),
+    provider: str = typer.Option("gateway", "--provider", help="LLM provider: 'gateway' (default) or 'anthropic'."),
+    against: Path | None = typer.Option(
+        None,
+        "--against",
+        help="Resolve incrementally against an existing workdir's registry + centroids.",
+        exists=True,
+        file_okay=False,
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """End-to-end pipeline: extract, coref, cross-doc resolve, write HITL review files."""
@@ -165,7 +229,7 @@ def pipeline_cmd(
     schema = load_schema(schema_path)
     docs = _read_documents(input_path)
     extractor = GLiNERExtractor(model_id=gliner_model)
-    llm = AnthropicClient()
+    llm = _make_llm_client(provider)
 
     run = pipeline.run(
         documents=docs,
@@ -177,6 +241,7 @@ def pipeline_cmd(
         review_threshold=review_threshold,
         merge_threshold=merge_threshold,
         only_flagged_review=only_flagged_review,
+        incremental_from=against,
     )
 
     console.print()
@@ -257,6 +322,88 @@ def review_import(
     """Replay edited review JSONL files back into the workdir's extractions."""
     updated = pipeline.import_reviewed(workdir, review_dir)
     console.print(f"Replayed reviews for [green]{len(updated)}[/green] document(s)")
+
+
+# ---- eval ------------------------------------------------------------------
+
+
+@app.command()
+def eval(
+    workdir: Path = typer.Argument(..., exists=True, file_okay=False),
+    gold_path: Path = typer.Option(..., "--gold", "-g", exists=True, dir_okay=False),
+    sweep: bool = typer.Option(False, "--sweep", help="Sweep merge/borderline thresholds."),
+    json_out: Path | None = typer.Option(None, "--json-out", help="Write full report(s) as JSON."),
+) -> None:
+    """Score a workdir's cluster assignments against a JSONL gold file."""
+    results = pipeline.load_extractions_dir(workdir / "extractions")
+    gold = load_gold(gold_path)
+
+    if sweep:
+        schema = load_schema(workdir / "schema.yaml")
+        reports = sweep_thresholds(results, gold, schema)
+        if not reports:
+            console.print("[yellow]No scorable entities in extraction results.[/yellow]")
+            raise typer.Exit(1)
+        _render_sweep(reports)
+        if json_out:
+            json_out.write_text(
+                json.dumps([r.to_dict() for r in reports], indent=2) + "\n",
+                encoding="utf-8",
+            )
+        return
+
+    report = evaluate(results, gold)
+    _render_report(report)
+    if json_out:
+        json_out.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
+
+
+def _render_report(report: EvalReport) -> None:
+    table = Table(title="Eval report")
+    table.add_column("metric")
+    table.add_column("precision", justify="right")
+    table.add_column("recall", justify="right")
+    table.add_column("f1", justify="right")
+    table.add_row(
+        "pairwise",
+        f"{report.pairwise.precision:.3f}",
+        f"{report.pairwise.recall:.3f}",
+        f"{report.pairwise.f1:.3f}",
+    )
+    table.add_row(
+        "bcubed",
+        f"{report.bcubed.precision:.3f}",
+        f"{report.bcubed.recall:.3f}",
+        f"{report.bcubed.f1:.3f}",
+    )
+    console.print(table)
+    console.print(
+        f"scored {report.n_entities_scored} entities — "
+        f"system clusters: {report.n_clusters_system}, "
+        f"gold clusters: {report.n_clusters_gold}"
+    )
+
+
+def _render_sweep(reports: list[EvalReport]) -> None:
+    table = Table(title="Threshold sweep (pairwise F1 / BCubed F1)")
+    table.add_column("merge", justify="right")
+    table.add_column("borderline", justify="right")
+    table.add_column("pairwise_f1", justify="right")
+    table.add_column("bcubed_f1", justify="right")
+    for r in reports:
+        table.add_row(
+            f"{r.config.get('merge_threshold', 0):.2f}",
+            f"{r.config.get('borderline_threshold', 0):.2f}",
+            f"{r.pairwise.f1:.3f}",
+            f"{r.bcubed.f1:.3f}",
+        )
+    console.print(table)
+    best = max(reports, key=lambda r: r.pairwise.f1)
+    console.print(
+        f"\n[green]Best by pairwise F1:[/green] merge={best.config.get('merge_threshold')}, "
+        f"borderline={best.config.get('borderline_threshold')} → "
+        f"pairwise_f1={best.pairwise.f1:.3f}, bcubed_f1={best.bcubed.f1:.3f}"
+    )
 
 
 # ---- inspect ---------------------------------------------------------------

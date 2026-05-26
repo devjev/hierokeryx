@@ -90,6 +90,8 @@ class FakeLLM:
 class FakeEmbedder:
     """Same-keyword entities get nearly identical embeddings; different ones diverge."""
 
+    model_id = "fake/embedder"
+
     def encode(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.empty((0, 0), dtype=np.float32)
