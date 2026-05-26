@@ -1,0 +1,112 @@
+[project]
+name = "hierokeryx"
+version = "0.1.0"
+description = "Robust entity extraction and resolution with GLiNER spans, LLM coreference, and file-based human-in-the-loop review."
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Jevgeni Tarassov", email = "jevgeni@tarassov.ch" },
+]
+requires-python = ">=3.13,<3.14"
+keywords = ["nlp", "ner", "entity-extraction", "entity-resolution", "coreference", "gliner", "anthropic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    "gliner>=0.2.20",
+    "anthropic>=0.40",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.5",
+    "typer>=0.13",
+    "rich>=13.9",
+    "sentence-transformers>=3.3",
+    "scikit-learn>=1.5",
+    "numpy>=2.1",
+    "jsonschema>=4.23",
+    "pyyaml>=6.0",
+    "tomli-w>=1.0",
+]
+
+[project.scripts]
+hkx = "hierokeryx.cli:app"
+
+[project.optional-dependencies]
+gpu = [
+    "torch>=2.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "vcrpy>=6.0",
+    "mypy>=1.13",
+    "hypothesis>=6.115",
+    "types-pyyaml>=6.0",
+]
+# Note: `ruff` is provided by the nix flake (devShells.default) rather than uv,
+# because the PyPI ruff is a standalone dynamically-linked binary that NixOS
+# cannot run without patching. mypy is a pure Python package and works fine.
+
+[build-system]
+requires = ["uv_build>=0.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF", "N", "PL",
+]
+ignore = [
+    "PLR0913",  # too many arguments — fine for orchestrator entry points
+    "PLR2004",  # magic values — fine in tests and confidence math
+    "PLR0912",  # too many branches — fine for the review linter aggregator
+    "N812",     # lowercase imported as non-lowercase
+    "B008",     # Typer DSL builds option defaults with typer.Option(...)
+    "RUF001",   # em-dash / en-dash in docstrings is deliberate
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLR2004", "S101", "PLC0415"]  # lazy/local imports allowed in tests
+"src/hierokeryx/extract/gliner_runner.py" = ["PLC0415"]   # lazy GLiNER import
+"src/hierokeryx/resolve/embed.py" = ["PLC0415"]           # lazy sentence-transformer
+"src/hierokeryx/resolve/cluster.py" = ["PLC0415"]         # was: lazy HDBSCAN
+"src/hierokeryx/llm/anthropic_client.py" = ["PLC0415"]    # lazy Anthropic SDK
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+disallow_untyped_decorators = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["gliner.*", "sentence_transformers.*", "sklearn.*", "vcr.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:torch.*",
+    "ignore::DeprecationWarning:transformers.*",
+    "ignore::DeprecationWarning:huggingface_hub.*",
+    "ignore::UserWarning:huggingface_hub.*",
+    "ignore::FutureWarning:transformers.*",
+    "ignore::FutureWarning:huggingface_hub.*",
+    "ignore::UserWarning:torch.*",
+    "ignore::FutureWarning:sklearn.*",
+]
+markers = [
+    "integration: requires downloaded models or external APIs",
+    "slow: takes > 10s",
+]

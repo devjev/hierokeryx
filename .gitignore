@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtualenv / uv
+.venv/
+.python-cache/
+
+# Nix / direnv
+.direnv/
+result
+result-*
+
+# Tooling caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local model cache (HuggingFace pulls models here on first use)
+.models/
+
+# Local workdirs from CLI runs
+/workdir/
+/run*/
+/tmp/
+
+# Secrets
+.env
+.env.*
+!.env.example

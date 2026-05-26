@@ -1,0 +1,25 @@
+# Default hierokeryx configuration. CLI flags override these values.
+
+[extract]
+gliner_model = "urchade/gliner_large-v2.5"
+gliner_threshold = 0.4
+flat_ner = false
+multi_label = true
+
+[resolve]
+embed_model = "sentence-transformers/all-MiniLM-L6-v2"
+crossdoc_merge_threshold = 0.82
+crossdoc_borderline_cosine = 0.75
+
+[llm]
+provider = "anthropic"
+coref_model = "claude-haiku-4-5"
+tiebreak_model = "claude-sonnet-4-6"
+escalate_model = "claude-opus-4-7"
+max_attempts = 2
+
+[confidence]
+gliner_weight = 0.4
+llm_weight = 0.4
+margin_weight = 0.2
+review_threshold = 0.7
