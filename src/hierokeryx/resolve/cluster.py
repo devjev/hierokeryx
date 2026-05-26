@@ -40,12 +40,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ClusterAssignment:
-    """The cluster a given entity ended up in, plus the supporting similarity."""
+    """The cluster a given entity ended up in, plus the supporting similarity.
+
+    `top_similarity` is the cosine to the assigned cluster's centroid;
+    `second_similarity` is the cosine to the next-best cluster — together
+    they form the margin used by
+    [`crossdoc_confidence`][hierokeryx.confidence.crossdoc_confidence].
+    `source` is one of `"threshold"` (above merge threshold), `"llm_tiebreak"`
+    (LLM-adjudicated borderline), or `"singleton"` (no neighbour above
+    threshold).
+    """
 
     cluster_id: str
     top_similarity: float = 1.0
     second_similarity: float = 0.0
-    source: str = "hdbscan"  # one of: "hdbscan", "llm_tiebreak", "singleton"
+    source: str = "threshold"  # one of: "threshold", "llm_tiebreak", "singleton"
 
 
 def cluster_by_type(
@@ -127,7 +136,7 @@ def _cluster_block(
             cluster_id=cluster_id,
             top_similarity=top_sim,
             second_similarity=second_sim,
-            source="hdbscan",
+            source="threshold",
         )
 
     # Second pass: noise entities — borderline tie-break, otherwise singleton.
