@@ -42,6 +42,9 @@ htmlcov/
 /run*/
 /tmp/
 
+# MkDocs build output
+/site/
+
 # Secrets
 .env
 .env.*
