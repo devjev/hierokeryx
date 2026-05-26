@@ -1,0 +1,22 @@
+version: "1"
+types:
+  - name: Drug
+    description: A pharmaceutical compound or medication
+    examples:
+      - aspirin
+      - ibuprofen
+      - paracetamol
+
+  - name: Dose
+    description: A quantity or dosage of a drug, e.g. "500 mg twice daily"
+    examples:
+      - 500 mg
+      - 10 ml
+      - two tablets
+
+  - name: Condition
+    description: A disease, symptom, or medical condition being treated
+    examples:
+      - hypertension
+      - migraine
+      - type 2 diabetes
