@@ -16,6 +16,15 @@
         let
           pkgs = pkgsFor system;
 
+          # Python interpreter with pylsp bundled into its site-packages so
+          # editors that invoke `python -m pylsp` (rather than the `pylsp`
+          # binary directly) can find it. The .venv uv creates from this
+          # interpreter does NOT inherit these — venv site-packages start
+          # empty, so project deps stay isolated.
+          python = pkgs.python313.withPackages (ps: [
+            ps.python-lsp-server
+          ]);
+
           # C++ / system runtime libs needed by ML wheels (torch, transformers,
           # sentence-transformers, gliner). The PyPI wheels are linked against
           # libstdc++/libgcc/libgomp which are not on NixOS's default loader path.
@@ -27,19 +36,24 @@
         {
           default = pkgs.mkShell {
             packages = [
-              pkgs.python313
+              python
               pkgs.uv
               # NixOS can't run uv-installed ruff because it's a dynamically
               # linked standalone binary, not a Python C extension. The
               # nixpkgs build is patched for nix's loader.
               pkgs.ruff
+              # pylsp comes from `python.withPackages` above so both
+              # `pylsp` and `python -m pylsp` resolve. For project deps
+              # (numpy, pydantic, ...) to show up in completion, point
+              # jedi at the venv in your editor config:
+              #   pylsp.plugins.jedi.environment = ".venv/bin/python"
             ] ++ mlRuntimeLibs;
 
-            # uv will create .venv/ pointing at the nix-provided python313
+            # uv will create .venv/ pointing at the nix-provided python
             # rather than downloading its own interpreter.
             env = {
               UV_PYTHON_PREFERENCE = "only-system";
-              UV_PYTHON = "${pkgs.python313}/bin/python3.13";
+              UV_PYTHON = "${python}/bin/python3.13";
             } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath mlRuntimeLibs;
             };
