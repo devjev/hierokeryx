@@ -1,0 +1,136 @@
+# Workdir layout
+
+Every CLI run that produces artifacts writes them under a single
+**workdir** — a directory you control, with a fixed layout the rest of
+the tooling assumes.
+
+## The canonical layout
+
+```text
+workdir/
+├── schema.yaml              # the EntitySchema used for this run
+├── manifest.json            # run metadata
+├── extractions/
+│   ├── doc_01.json          # one ExtractionResult per document
+│   ├── doc_02.json
+│   └── ...
+├── registry.json            # cross-doc EntityRegistry
+└── review/
+    ├── doc_05.jsonl         # flagged entities, one document per file
+    └── ...
+```
+
+Every file is self-describing — you can `cat` any of them and understand
+the contents without consulting the rest of the workdir.
+
+## File-by-file
+
+### `schema.yaml`
+
+A verbatim copy of the [`EntitySchema`][hierokeryx.models.EntitySchema]
+the pipeline ran against. Saved here so the workdir is self-contained:
+you can move it to another machine and `hkx inspect` will still work.
+
+### `manifest.json`
+
+Run-level metadata produced by
+[`pipeline.run`][hierokeryx.pipeline.run]:
+
+```json
+{
+  "created_at": "2026-05-26T14:08:00.123456",
+  "schema_fingerprint": "a1b2c3d4...",
+  "n_documents": 3,
+  "n_entities": 7,
+  "n_flagged": 1,
+  "model_versions": {
+    "gliner": "urchade/gliner_large-v2.5",
+    "embedder": "sentence-transformers/all-MiniLM-L6-v2"
+  }
+}
+```
+
+Useful for: telling whether two workdirs came from the same code path,
+debugging "why does this run look different from last week's".
+
+### `extractions/<doc_id>.json`
+
+One [`ExtractionResult`][hierokeryx.models.ExtractionResult] per
+document. Contains the document text, the entities with their mentions,
+and the schema version. Round-trippable via
+[`load_extraction`][hierokeryx.pipeline.load_extraction] and
+[`save_extraction`][hierokeryx.pipeline.save_extraction].
+
+The filename is the document's `id`, sanitized (private
+`_safe_filename` helper in `hierokeryx.review.jsonl`) — slashes and
+unprintable characters become underscores so the file always exists on
+disk.
+
+### `registry.json`
+
+The cross-doc [`EntityRegistry`][hierokeryx.models.EntityRegistry]:
+which entities ended up in which clusters, with canonical forms and
+types per cluster.
+
+A registry is *additive across runs* in spirit but the CLI rewrites it
+from scratch on each `hkx resolve` / `hkx pipeline`. If you want
+incremental cross-doc resolution (add new documents without re-
+clustering everything), drop into library mode and build a custom
+pipeline — see [Cross-document resolution](../how-to/cross-doc-resolution.md).
+
+### `review/<doc_id>.jsonl`
+
+One JSONL file per document with at least one flagged entity (or all
+documents, if you passed `--all-for-review`). See
+[Why JSONL HITL](why-jsonl-hitl.md) for the format.
+
+By default this directory only contains files for documents that have
+something flagged — a clean run with no flagged entities produces an
+empty `review/` directory. Pass `--all-for-review` to write every
+document regardless.
+
+## Lifecycle
+
+A workdir progresses through three phases:
+
+1. **After `hkx extract`** — `schema.yaml`, `extractions/*.json`. No
+   registry, no review. Useful for inspecting GLiNER + within-doc coref
+   output before running cross-doc resolution.
+2. **After `hkx resolve`** — adds `registry.json`. The extractions are
+   rewritten in place to carry `cluster_id`. Run this any time you want
+   to recluster (different threshold, different LLM tie-break setting).
+3. **After `hkx pipeline`** — fully populated, including `review/*.jsonl`
+   and `manifest.json`.
+
+`hkx review import` mutates `extractions/*.json` to reflect human edits;
+it does not touch `registry.json` (cluster assignments are not
+re-derived on import, by design — a human override should be sticky).
+
+## Working with multiple workdirs
+
+Common patterns:
+
+- **One workdir per dataset.** `workdir-curie/`, `workdir-einstein/`.
+- **Versioned workdirs for experiments.** `workdir-v1/`,
+  `workdir-v2-tightcluster/`. Diff `manifest.json` to see what changed.
+- **Workdir as PR artifact.** Commit the workdir to a separate
+  `data/` repo. The git history then includes both the model output
+  and any human edits.
+
+Whatever you do, treat the workdir as opaque to anything except `hkx`
+and the documented library helpers. The internal JSON structure is
+stable across patch releases (see `schema_version` in each file) but
+not pinned forever.
+
+## What's *not* in the workdir
+
+- **The source documents.** You bring those. The workdir only stores
+  what was extracted from them. The `text_sha` on each review file is
+  enough to detect drift but not to reconstruct the document.
+- **LLM transcripts.** No prompts or responses are persisted. If you
+  need them for audit, hook into
+  [`AnthropicClient`][hierokeryx.llm.anthropic_client.AnthropicClient]
+  via Python's `logging` and capture from there.
+- **Model weights.** GLiNER and the sentence-transformer cache under
+  `HF_HOME` (default `~/.cache/huggingface/`); the workdir only
+  references model *names*.

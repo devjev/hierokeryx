@@ -48,6 +48,15 @@ dev = [
     "hypothesis>=6.115",
     "types-pyyaml>=6.0",
 ]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+    "griffe-pydantic>=1.1",
+    "mkdocs-typer2>=0.1",
+    "mkdocs-autorefs>=1.2",
+    "pymdown-extensions>=10.11",
+]
 # Note: `ruff` is provided by the nix flake (devShells.default) rather than uv,
 # because the PyPI ruff is a standalone dynamically-linked binary that NixOS
 # cannot run without patching. mypy is a pure Python package and works fine.

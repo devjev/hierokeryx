@@ -1,0 +1,163 @@
+site_name: hierokeryx
+site_description: Robust entity extraction and resolution — GLiNER spans, LLM coreference, file-based HITL review.
+site_url: https://jevtarassov.github.io/hierokeryx/
+site_author: Jevgeni Tarassov
+
+repo_name: jevtarassov/hierokeryx
+repo_url: https://github.com/jevtarassov/hierokeryx
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2026 Jevgeni Tarassov
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+
+watch:
+  - src/hierokeryx
+  - README.md
+  - CHANGELOG.md
+  - CONTRIBUTING.md
+
+plugins:
+  - search
+  - autorefs
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            extensions:
+              - griffe_pydantic
+            allow_inspection: false
+            show_source: true
+            show_signature_annotations: true
+            separate_signature: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+            show_bases: true
+            show_root_heading: true
+            show_root_toc_entry: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: google
+            docstring_section_style: table
+            members_order: source
+            filters:
+              - "!^_"
+              - "!^[A-Z][A-Z_]+$"
+            inventories:
+              - https://docs.python.org/3/objects.inv
+              - https://docs.pydantic.dev/latest/objects.inv
+              - https://numpy.org/doc/stable/objects.inv
+  - mkdocs-typer2
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jevtarassov/hierokeryx
+  version:
+    default: latest
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Tutorial:
+      - tutorial/index.md
+      - Define a schema: tutorial/01-define-schema.md
+      - Run the pipeline: tutorial/02-run-pipeline.md
+      - Inspect and review: tutorial/03-inspect-and-review.md
+  - How-to:
+      - Use a custom LLM backend: how-to/custom-llm-backend.md
+      - Tune confidence thresholds: how-to/tune-thresholds.md
+      - Roundtrip JSONL programmatically: how-to/programmatic-jsonl.md
+      - Run on GPU: how-to/run-on-gpu.md
+      - Cross-document resolution: how-to/cross-doc-resolution.md
+      - Library mode (no CLI): how-to/library-mode.md
+      - Cost and prompt caching: how-to/cost-and-caching.md
+  - Concepts:
+      - Why GLiNER + LLM: concepts/why-gliner-plus-llm.md
+      - Why JSONL HITL: concepts/why-jsonl-hitl.md
+      - Confidence math: concepts/confidence-math.md
+      - Workdir layout: concepts/workdir-layout.md
+      - Determinism: concepts/determinism.md
+      - LLM safety: concepts/llm-safety.md
+  - Reference:
+      - API:
+          - reference/api/index.md
+          - hierokeryx.models: reference/api/models.md
+          - hierokeryx.pipeline: reference/api/pipeline.md
+          - hierokeryx.schema: reference/api/schema.md
+          - hierokeryx.confidence: reference/api/confidence.md
+          - hierokeryx.extract: reference/api/extract.md
+          - hierokeryx.resolve: reference/api/resolve.md
+          - hierokeryx.llm: reference/api/llm.md
+          - hierokeryx.review: reference/api/review.md
+      - CLI: reference/cli.md
+  - Comparison: comparison.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md

@@ -1,0 +1,17 @@
+/* Tighten code blocks a touch and make API reference signatures readable. */
+.md-typeset .doc-signature {
+  font-size: 0.85rem;
+  background: var(--md-code-bg-color);
+  border-radius: 0.2rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.md-typeset .doc-heading code {
+  font-size: inherit;
+}
+
+/* Mermaid diagrams: center and add breathing room. */
+.md-typeset .mermaid {
+  text-align: center;
+  margin: 1.5rem 0;
+}
