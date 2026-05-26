@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hierokeryx/review/v1",
+  "title": "hierokeryx review file",
+  "description": "JSONL: line 1 is a ReviewHeader; subsequent lines are ReviewEntityLines.",
+  "oneOf": [
+    { "$ref": "#/$defs/ReviewHeader" },
+    { "$ref": "#/$defs/ReviewEntityLine" }
+  ],
+  "$defs": {
+    "ReviewHeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["$schema", "doc_id", "text_sha", "schema_version"],
+      "properties": {
+        "$schema": { "const": "hierokeryx/review/v1" },
+        "doc_id": { "type": "string", "minLength": 1 },
+        "text_sha": { "type": "string", "minLength": 1 },
+        "schema_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ReviewMention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end", "text"],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "exclusiveMinimum": 0 },
+        "text": { "type": "string", "minLength": 1 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "enum": ["gliner", "llm", "human"] }
+      }
+    },
+    "ReviewEntityLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "canonical", "surface_canonical", "confidence", "mentions"],
+      "properties": {
+        "op": { "enum": ["keep", "reject", "edit", "add"], "default": "keep" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "canonical": { "type": "string", "minLength": 1 },
+        "surface_canonical": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mentions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ReviewMention" }
+        },
+        "cluster_id": { "type": ["string", "null"] },
+        "reason": {
+          "enum": ["low_span_conf", "low_cluster_conf", "ambiguous_merge", "type_uncertain", null]
+        },
+        "candidates": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
