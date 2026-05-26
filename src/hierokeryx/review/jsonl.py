@@ -30,9 +30,23 @@ from hierokeryx.models import (
 )
 
 SCHEMA_MARKER = "hierokeryx/review/v1"
+"""Stable URI written as the `$schema` field of the JSONL header line.
+
+JSON-Schema-aware editors use it to auto-validate each line as the user
+types. Bump the trailing version segment on any breaking change to the
+wire format.
+"""
 
 
 class ReviewHeader(BaseModel):
+    """First line of a review JSONL file.
+
+    Carries the doc identity (`doc_id`), a short content hash of the source
+    text (`text_sha`) so the linter can detect a stale review against an
+    edited document, and the `schema_version` the entities were extracted
+    against.
+    """
+
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     schema_marker: Literal["hierokeryx/review/v1"] = Field(
@@ -44,7 +58,14 @@ class ReviewHeader(BaseModel):
 
 
 class ReviewMention(BaseModel):
-    """Flat mention representation in the JSONL wire format."""
+    """Flat mention representation in the JSONL wire format.
+
+    The nested [`Span`][hierokeryx.models.Span] of a core
+    [`Mention`][hierokeryx.models.Mention] is hoisted into top-level
+    `start`/`end`/`text` fields to keep one-line edits short and readable.
+    Human-added mentions may omit `id`; one will be derived from
+    `(doc_id, start, end, source)` on import.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -57,7 +78,17 @@ class ReviewMention(BaseModel):
 
 
 class ReviewEntityLine(BaseModel):
-    """One entity as it appears on a line of a review JSONL file."""
+    """One entity as it appears on a line of a review JSONL file.
+
+    The `op` field tells [`apply_review`][hierokeryx.review.apply.apply_review]
+    what to do with the line on import: `keep` accepts the current state,
+    `edit` replaces the original entity's mutable fields (including its
+    mentions), `reject` drops the entity, and `add` introduces a new
+    human-curated entity.
+
+    `reason` and `candidates` are informational annotations populated on
+    export and ignored on import.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -179,6 +210,7 @@ def write_review_dir(
 
 
 def read_review(path: str | Path) -> tuple[ReviewHeader, list[ReviewEntityLine]]:
+    """Parse one review JSONL file into its header and entity lines."""
     p = Path(path)
     lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
     if not lines:
@@ -192,6 +224,7 @@ def read_review(path: str | Path) -> tuple[ReviewHeader, list[ReviewEntityLine]]
 def read_review_dir(
     directory: str | Path,
 ) -> dict[str, tuple[ReviewHeader, list[ReviewEntityLine]]]:
+    """Parse every `*.jsonl` review file under `directory`, keyed by `doc_id`."""
     d = Path(directory)
     out: dict[str, tuple[ReviewHeader, list[ReviewEntityLine]]] = {}
     for path in sorted(d.glob("*.jsonl")):
